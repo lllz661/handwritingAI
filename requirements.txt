@@ -1,0 +1,9 @@
+pytesseract
+transformers
+datasets
+torch
+torchvision
+Pillow
+pdf2image
+opencv-python
+layoutparser
