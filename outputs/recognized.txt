@@ -1,9 +1,0 @@
-[outputs\UZK_88_ПРС\UZK_88_ПРС_page1.png] 0 0
-[outputs\UZK_88_ПРС\UZK_88_ПРС_page2.png] 0 0
-[outputs\UZK_88_ПРС\UZK_88_ПРС_page3.png] 0 0
-[outputs\UZK_88_ПРС\UZK_88_ПРС_page4.png] 0 1
-[outputs\UZK_88_ПРС\UZK_88_ПРС_page5.png] THE TRI
-[outputs\UZK_88_ПРС\UZK_88_ПРС_page6.png] full to tell
-[outputs\UZK_88_ПРС\UZK_88_ПРС_page7.png] 0 1
-[outputs\UZK_88_ПРС\UZK_88_ПРС_page8.png] 0 0 0 0 0 0 0 0 0 0 0 0 0 0
-[outputs\UZK_88_ПРС\UZK_88_ПРС_page9.png] ReadEditView history
