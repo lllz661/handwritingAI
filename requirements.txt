@@ -1,10 +1,10 @@
-numpy
+torchvision
+pillow
+pdf2image
 pytesseract
+opencv-python-headless
+rapidfuzz
+numpy
+torch
 transformers
 datasets
-torch
-torchvision
-Pillow
-pdf2image
-opencv-python
-layoutparser

@@ -1,72 +1,81 @@
 import sys
 import logging
 from pathlib import Path
-from src.dataset.prepare import prepare_dataset
-from src.ocr.detect import process_folder, process_file, load_model
-from src.dataset.split import split_ground_truth
+from src.dataset.prepare import build_mapping_from_outputs_pages
+from src.dataset.split import split_mapping
+from src.ocr.paragraphs import process_pdf_keep_handwriting, pdf_to_page_images
 from src.ocr.recognize import recognize_folder
-from src.utils.io import ensure_dir
+from src.utils.io import ensure_dir, save_json
 
-LOG_FILE = Path("outputs/logs/runner.log")
-FINAL_OUTPUT = Path("outputs/final_results.txt")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-def setup_logging():
-    ensure_dir(str(LOG_FILE.parent))
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(str(LOG_FILE), encoding="utf-8"),
-            logging.StreamHandler(sys.stdout)
-        ]
-    )
-
-def main():
-    if len(sys.argv) < 2:
-        print("Использование: python runner.py <путь_к_папке_с_файлами_или_pdf>")
-        sys.exit(1)
-
-    setup_logging()
-    src_path = Path(sys.argv[1])
-    logging = logging.getLogger()
-
-    logging.info(f"Старт пайплайна. Вход: {src_path}")
-
-    # 0. Подготовка: скопировать файлы в dataset/
-    ds = prepare_dataset(str(src_path), target_root="dataset")
-    images_dir = Path(ds["images"])
-    gt_dir = Path(ds["ground_truth"])
-
-    # 1. Конвертация всех PDF/изображений -> outputs/pages/<stem>/
-    ensure_dir("outputs/pages")
-    model = load_model()
-    crop_folders = []
-    if images_dir.exists():
-        crop_folders = process_folder(str(images_dir), model)
+def cmd_prepare(src_pdf_or_folder):
+    # Convert PDFs to pages (if PDF), else copy images into outputs/pages manually via earlier scripts
+    p = Path(src_pdf_or_folder)
+    if p.is_file() and p.suffix.lower() in [".pdf"]:
+        logging.info("Конвертация PDF → outputs/pages ...")
+        pdf_to_page_images(str(p))
     else:
-        logging.error("dataset/images не найден")
+        logging.info("Если вход — папка, убедись, что pages уже в outputs/pages/...")
+
+def cmd_build_mapping():
+    logging.info("Сбор mapping.json ...")
+    m = build_mapping_from_outputs_pages()
+    logging.info(f"mapping создан — {len(m)} пар")
+
+def cmd_split():
+    logging.info("Split mapping → train/val")
+    train_n, val_n = split_mapping()
+    logging.info(f"Train: {train_n}, Val: {val_n}")
+
+def cmd_preview(n=10, backend="auto"):
+    # возьмём небольшой сэмпл из dataset/prepared/train/images и распознаём
+    from random import sample
+    import glob
+    imgs = list(Path("dataset/prepared/train/images").glob("*.png"))
+    if not imgs:
+        logging.error("Нет подготовленных изображений в dataset/prepared/train/images")
         return
+    sel = sample(imgs, min(n, len(imgs)))
+    for p in sel:
+        text = recognize_folder(str(p.parent), backend=backend)  # recognize_folder expects folder
+        logging.info(f"Preview {p}: {text}")
 
-    # 2. Разрезаем ground_truth на абзацы рядом с картинками (outputs/pages)
-    if gt_dir.exists():
-        report = split_ground_truth(str(gt_dir), out_pages_root="outputs/pages")
-        logging.info("Разрезаны ground_truth -> outputs/pages (см. report)")
-    else:
-        logging.warning("dataset/ground_truth не найден — пропускаем шаг split")
-
-    # 3. OCR: для каждой папки с картинками распознаём по-кропам (если они есть)
+def cmd_infer(pdf_path):
+    logging.info("Инференс: PDF -> pages -> extract -> recognize")
+    # 1) convert pages
+    pages = pdf_to_page_images(pdf_path)
+    # 2) for each page, extract handwritten paragraphs and recognize
     results = []
-    for folder in crop_folders:
-        logging.info(f"OCR папки {folder}")
-        res = recognize_folder(folder, out_txt=None)
-        results.extend(res)
+    for page in pages:
+        saved = process_pdf_keep_handwriting(pdf_path)
+        # saved is list of {'crop_path':..., ...}
+        for s in saved:
+            res = recognize_folder(Path(s['crop_path']).parent, backend="auto")  # better to call per single crop if needed
+            results.extend(res)
+    out = Path("outputs/final_results.json")
+    save_json(results, out)
+    logging.info(f"Saved inference results -> {out}")
 
-    # 4. Сохраняем финальные результаты
-    ensure_dir(str(FINAL_OUTPUT.parent))
-    with open(FINAL_OUTPUT, "w", encoding="utf-8") as f:
-        for img, txt in results:
-            f.write(f"[{img}] {txt}\n")
-    logging.info(f"Готово — финальный результат: {FINAL_OUTPUT}")
+def usage():
+    print("Usage: python runner.py <command> [args]")
+    print("commands: prepare <pdf|folder>, build_mapping, split, preview, infer <pdf>")
 
-if __name__ == "__main__":
-    main()
+if __name__=="__main__":
+    if len(sys.argv) < 2:
+        usage(); sys.exit(1)
+    cmd = sys.argv[1]
+    if cmd == "prepare":
+        cmd_prepare(sys.argv[2] if len(sys.argv)>2 else ".")
+    elif cmd == "build_mapping":
+        cmd_build_mapping()
+    elif cmd == "split":
+        cmd_split()
+    elif cmd == "preview":
+        cmd_preview()
+    elif cmd == "infer":
+        if len(sys.argv)<3:
+            print("infer requires pdf path"); sys.exit(1)
+        cmd_infer(sys.argv[2])
+    else:
+        usage()

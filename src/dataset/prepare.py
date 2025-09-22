@@ -1,24 +1,52 @@
+import cv2
+import os
+import json
 from pathlib import Path
-from shutil import copy2
-from src.utils.io import ensure_dir
+from tqdm import tqdm
+from utils import augment_image
 
-def prepare_dataset(src_folder: str, target_root: str = "dataset"):
-    """
-    Копирует в target_root/images и target_root/ground_truth:
-    - все PNG/JPG/PDF в images (PDF оставляем, конвертация — позже)
-    - все TXT в ground_truth
-    """
-    src = Path(src_folder)
-    tgt = Path(target_root)
-    img_tgt = tgt / "images"
-    gt_tgt = tgt / "ground_truth"
-    ensure_dir(str(img_tgt))
-    ensure_dir(str(gt_tgt))
+def prepare_dataset(img_dir, labels_dir, output_dir, img_size=640):
+    os.makedirs(output_dir, exist_ok=True)
 
-    for p in sorted(src.iterdir()):
-        if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".pdf"):
-            copy2(str(p), str(img_tgt / p.name))
-        elif p.suffix.lower() == ".txt":
-            copy2(str(p), str(gt_tgt / p.name))
+    images_out = Path(output_dir) / "images"
+    labels_out = Path(output_dir) / "labels"
+    images_out.mkdir(parents=True, exist_ok=True)
+    labels_out.mkdir(parents=True, exist_ok=True)
 
-    return {"images": str(img_tgt), "ground_truth": str(gt_tgt)}
+    mapping = {}
+    class_id = 0
+
+    for img_name in tqdm(os.listdir(img_dir)):
+        img_path = Path(img_dir) / img_name
+        label_path = Path(labels_dir) / (Path(img_name).stem + ".json")
+
+        if not img_path.exists() or not label_path.exists():
+            continue
+
+        # Загружаем изображение
+        img = cv2.imread(str(img_path))
+        img = cv2.resize(img, (img_size, img_size))
+
+        # Аугментация (добавляем вариации)
+        augmented = augment_image(img)
+
+        # Сохраняем
+        out_name = Path(img_name).stem + ".jpg"
+        cv2.imwrite(str(images_out / out_name), augmented)
+
+        # Загружаем и обновляем аннотации
+        with open(label_path, "r") as f:
+            ann = json.load(f)
+
+        for obj in ann["objects"]:
+            if obj["class"] not in mapping:
+                mapping[obj["class"]] = class_id
+                class_id += 1
+            obj["class_id"] = mapping[obj["class"]]
+
+        with open(labels_out / (Path(img_name).stem + ".json"), "w") as f:
+            json.dump(ann, f, indent=4, ensure_ascii=False)
+
+    # сохраняем mapping.json
+    with open(Path(output_dir) / "mapping.json", "w") as f:
+        json.dump(mapping, f, indent=4, ensure_ascii=False)
