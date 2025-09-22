@@ -1,31 +1,32 @@
-
-import os
+import re
 from pathlib import Path
+from src.utils.io import ensure_dir
 
-def split_paragraphs(gt_dir: str, out_dir: str) -> None:
-    """
-    Делит текстовые файлы разметки на абзацы и сохраняет их в отдельные файлы.
+def split_into_paragraphs(text: str):
+    parts = [p.strip() for p in re.split(r"\n\s*\n", text.strip()) if p.strip()]
+    if len(parts) <= 1:
+        lines = [l.strip() for l in text.splitlines() if l.strip()]
+        if len(lines) > 1:
+            parts = lines
+        else:
+            parts = [s.strip() for s in re.split(r'(?<=[.!?])\s+', text.strip()) if s.strip()]
+    return parts
 
-    Args:
-        gt_dir (str): директория с ground truth (.txt).
-        out_dir (str): директория для сохранённых абзацев.
-    """
+def split_ground_truth(gt_dir: str, out_pages_root: str = "outputs/pages"):
     gt_dir = Path(gt_dir)
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_root = Path(out_pages_root)
+    ensure_dir(str(out_root))
 
-    for txt_file in gt_dir.glob("*.txt"):
-        with open(txt_file, "r", encoding="utf-8") as f:
-            content = f.read()
-
-        paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
-
-        save_dir = out_dir / txt_file.stem
-        save_dir.mkdir(parents=True, exist_ok=True)
-
-        for i, para in enumerate(paragraphs, start=1):
-            out_file = save_dir / f"para_{i:03d}.txt"
-            with open(out_file, "w", encoding="utf-8") as f:
-                f.write(para)
-
-        print(f"[OK] {txt_file} → {len(paragraphs)} абзацев сохранено в {save_dir}")
+    report = {"files": []}
+    for txt in sorted(gt_dir.glob("*.txt")):
+        text = txt.read_text(encoding="utf-8")
+        parts = split_into_paragraphs(text)
+        doc_folder = out_root / txt.stem
+        ensure_dir(str(doc_folder))
+        mapping = []
+        for i, p in enumerate(parts, start=1):
+            out_file = doc_folder / f"{txt.stem}_page1_paragraph{i}.txt"
+            out_file.write_text(p, encoding="utf-8")
+            mapping.append(str(out_file))
+        report["files"].append({"source": str(txt), "paragraphs": mapping})
+    return report

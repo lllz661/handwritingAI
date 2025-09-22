@@ -1,76 +1,72 @@
-import os
 import sys
 import logging
+from pathlib import Path
+from src.dataset.prepare import prepare_dataset
+from src.ocr.detect import process_folder, process_file, load_model
+from src.dataset.split import split_ground_truth
+from src.ocr.recognize import recognize_folder
+from src.utils.io import ensure_dir
 
-sys.path.append(os.path.abspath("src"))
-
-from src.ocr.detect import process_file, process_folder, load_model
-from src.ocr.paragraphs import page_paragraphs_from_image
-from src.utils.io import save_txt, ensure_dir
-
-FINAL_OUTPUT = "outputs/final_results.txt"
-LOG_FILE = "outputs/logs/runner.log"
-
+LOG_FILE = Path("outputs/logs/runner.log")
+FINAL_OUTPUT = Path("outputs/final_results.txt")
 
 def setup_logging():
-    ensure_dir("outputs/logs")
+    ensure_dir(str(LOG_FILE.parent))
     logging.basicConfig(
-        filename=LOG_FILE,
-        filemode="w",
         level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s"
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.FileHandler(str(LOG_FILE), encoding="utf-8"),
+            logging.StreamHandler(sys.stdout)
+        ]
     )
-    logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
-
 
 def main():
     if len(sys.argv) < 2:
-        print("Использование: python runner.py <pdf_файл | папка_с_изображениями>")
+        print("Использование: python runner.py <путь_к_папке_с_файлами_или_pdf>")
         sys.exit(1)
-
-    input_path = sys.argv[1]
-    ensure_dir("outputs/pages")
 
     setup_logging()
-    logging.info(f"▶ Старт обработки: {input_path}")
+    src_path = Path(sys.argv[1])
+    logging = logging.getLogger()
 
-    try:
-        # Загружаем модель
-        model = load_model()
+    logging.info(f"Старт пайплайна. Вход: {src_path}")
 
-        # 1. Детекция блоков
-        if os.path.isdir(input_path):
-            crop_folders = process_folder(input_path, model)
-        elif os.path.isfile(input_path):
-            crop_folders = process_file(input_path, model)
-        else:
-            logging.error(f"Неверный путь: {input_path}")
-            sys.exit(1)
+    # 0. Подготовка: скопировать файлы в dataset/
+    ds = prepare_dataset(str(src_path), target_root="dataset")
+    images_dir = Path(ds["images"])
+    gt_dir = Path(ds["ground_truth"])
 
-        # 2. OCR по кропам
-        results = []
-        for crop_folder in crop_folders:
-            if os.path.exists(crop_folder):
-                for img in os.listdir(crop_folder):
-                    img_path = os.path.join(crop_folder, img)
-                    try:
-                        text_blocks = page_paragraphs_from_image(img_path)
-                        for i, txt in enumerate(text_blocks, 1):
-                            results.append((f"{img}_p{i}", txt))
-                    except Exception as e:
-                        logging.error(f"Ошибка OCR для {img_path}: {e}")
+    # 1. Конвертация всех PDF/изображений -> outputs/pages/<stem>/
+    ensure_dir("outputs/pages")
+    model = load_model()
+    crop_folders = []
+    if images_dir.exists():
+        crop_folders = process_folder(str(images_dir), model)
+    else:
+        logging.error("dataset/images не найден")
+        return
 
-        # 3. Сохраняем финальный результат
-        with open(FINAL_OUTPUT, "w", encoding="utf-8") as f:
-            for img, txt in results:
-                f.write(f"[{img}] {txt}\n")
+    # 2. Разрезаем ground_truth на абзацы рядом с картинками (outputs/pages)
+    if gt_dir.exists():
+        report = split_ground_truth(str(gt_dir), out_pages_root="outputs/pages")
+        logging.info("Разрезаны ground_truth -> outputs/pages (см. report)")
+    else:
+        logging.warning("dataset/ground_truth не найден — пропускаем шаг split")
 
-        logging.info(f"✅ Финальный результат сохранён: {FINAL_OUTPUT}")
+    # 3. OCR: для каждой папки с картинками распознаём по-кропам (если они есть)
+    results = []
+    for folder in crop_folders:
+        logging.info(f"OCR папки {folder}")
+        res = recognize_folder(folder, out_txt=None)
+        results.extend(res)
 
-    except Exception as e:
-        logging.exception(f"❌ Критическая ошибка: {e}")
-        sys.exit(1)
-
+    # 4. Сохраняем финальные результаты
+    ensure_dir(str(FINAL_OUTPUT.parent))
+    with open(FINAL_OUTPUT, "w", encoding="utf-8") as f:
+        for img, txt in results:
+            f.write(f"[{img}] {txt}\n")
+    logging.info(f"Готово — финальный результат: {FINAL_OUTPUT}")
 
 if __name__ == "__main__":
     main()

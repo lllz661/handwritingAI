@@ -1,29 +1,24 @@
-
-import os
-import shutil
 from pathlib import Path
+from shutil import copy2
+from src.utils.io import ensure_dir
 
-def prepare_dataset(raw_dir: str, target_dir: str) -> None:
+def prepare_dataset(src_folder: str, target_root: str = "dataset"):
     """
-    Готовит датасет: копирует изображения и тексты в структуру проекта.
-
-    Args:
-        raw_dir (str): путь к сырым данным (pdf/jpg/png/txt).
-        target_dir (str): путь к целевой папке датасета.
+    Копирует в target_root/images и target_root/ground_truth:
+    - все PNG/JPG/PDF в images (PDF оставляем, конвертация — позже)
+    - все TXT в ground_truth
     """
-    raw_dir = Path(raw_dir)
-    target_dir = Path(target_dir)
+    src = Path(src_folder)
+    tgt = Path(target_root)
+    img_tgt = tgt / "images"
+    gt_tgt = tgt / "ground_truth"
+    ensure_dir(str(img_tgt))
+    ensure_dir(str(gt_tgt))
 
-    images_dir = target_dir / "images"
-    gt_dir = target_dir / "ground_truth"
+    for p in sorted(src.iterdir()):
+        if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".pdf"):
+            copy2(str(p), str(img_tgt / p.name))
+        elif p.suffix.lower() == ".txt":
+            copy2(str(p), str(gt_tgt / p.name))
 
-    images_dir.mkdir(parents=True, exist_ok=True)
-    gt_dir.mkdir(parents=True, exist_ok=True)
-
-    for file in raw_dir.iterdir():
-        if file.suffix.lower() in [".png", ".jpg", ".jpeg"]:
-            shutil.copy(file, images_dir / file.name)
-        elif file.suffix.lower() == ".txt":
-            shutil.copy(file, gt_dir / file.name)
-
-    print(f"[OK] Датасет подготовлен: {target_dir}")
+    return {"images": str(img_tgt), "ground_truth": str(gt_tgt)}
