@@ -1,0 +1,78 @@
+# Project configuration
+project:
+  name: "handwritingAI"
+  version: "1.0.0"
+  description: "Handwritten Text Recognition System"
+
+data:
+  # Input data directories
+  raw:
+    pdf_dir: "data/raw/pdf"  # Directory containing PDF files
+    
+  # Processed data directories
+  processed:
+    images_dir: "data/processed/images"  # Extracted page images
+    crops_dir: "data/processed/crops"    # Cropped text blocks
+    aligned_dir: "data/processed/aligned" # Aligned text with ground truth
+    
+  # Model directory
+  model_dir: "models"  # Directory to save trained models
+
+  # Ground truth data
+  ground_truth:
+    dir: "data/ground_truth"  # Ground truth text files
+    file_ext: ".txt"          # File extension for ground truth files
+
+# Model configuration
+model:
+  name: "crnn"  # Model architecture (crnn or transformer)
+  input_size: [32, 256]  # Input size (height, width)
+  num_channels: 1        # Number of input channels (1 for grayscale)
+  num_classes: 95        # Number of character classes (including blank)
+  hidden_size: 256       # Hidden size for RNN layers
+  num_rnn_layers: 2      # Number of RNN layers
+  rnn_dropout: 0.5       # Dropout probability for RNN layers
+  bidirectional: True    # Use bidirectional RNN
+  pretrained: False      # Use pretrained weights if available
+
+# Training configuration
+training:
+  batch_size: 32
+  num_epochs: 100
+  learning_rate: 0.001
+  weight_decay: 1e-5
+  clip_grad_norm: 5.0    # Gradient clipping
+  early_stopping_patience: 10  # Stop if no improvement for N epochs
+  checkpoint_dir: "models/checkpoints"
+  best_model_dir: "models/best"
+  log_dir: "outputs/logs"
+  
+# Data preprocessing
+preprocessing:
+  pdf_to_image:
+    dpi: 300
+    preprocess: True     # Apply preprocessing to images
+    
+  text_block_detection:
+    min_block_height: 20
+    min_block_width: 100
+    max_skew_angle: 5.0  # Maximum skew angle in degrees
+    debug: False         # Save debug images
+    
+  text_alignment:
+    min_similarity: 0.6  # Minimum similarity score for text alignment
+
+# Evaluation
+evaluation:
+  metrics: ["cer", "wer", "accuracy"]
+  test_split: 0.2        # Fraction of data to use for testing
+  results_dir: "outputs/results"
+  
+# Logging
+logging:
+  level: "INFO"
+  file: "outputs/logs/training.log"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+# Hardware
+device: "cuda"  # cuda or cpu

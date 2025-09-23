@@ -1,10 +1,30 @@
-torchvision
-pillow
-pdf2image
 pytesseract
-opencv-python-headless
-rapidfuzz
-numpy
-torch
-transformers
-datasets
+# Core dependencies
+torch>=2.0.0
+torchvision>=0.15.0
+numpy>=1.21.0
+opencv-python>=4.5.0
+Pillow>=9.0.0
+
+# PDF and image processing
+pymupdf>=1.19.0
+pdf2image>=1.16.0
+imutils>=0.5.4
+
+# Text processing and alignment
+rapidfuzz>=2.13.0
+editdistance>=0.6.2
+
+# Utils
+tqdm>=4.65.0
+scikit-learn>=1.0.2
+matplotlib>=3.5.0
+seaborn>=0.11.2
+
+# Optional for advanced models
+transformers>=4.25.0
+datasets>=2.10.0
+
+# Development
+torchinfo>=1.7.0
+pytest>=7.0.0
